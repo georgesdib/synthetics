@@ -1,5 +1,5 @@
 build:
-    cargo +nightly contract build
+	cargo +nightly contract build
 
 test:
-    cargo +nightly test
+	cargo +nightly test
