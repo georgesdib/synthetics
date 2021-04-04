@@ -48,7 +48,9 @@ mod synthetics {
         short: Token,
         /// The long token, you ming this when you buy the corresponding short
         /// long total balance has to be less than or equal than the total balance of short
-        long: Token
+        long: Token,
+        /// Collateral held by each accont
+        margin: ink_storage::collections::HashMap<AccountId, Balance>
     }
 
     #[ink(event)]
@@ -60,6 +62,13 @@ mod synthetics {
         value: Balance
     }
 
+    /// The error types.
+    #[ink(event)]
+    pub struct Error {
+        /// Message
+        message: ink_prelude::string::String,
+    }
+
     // TODO: make this call an oracle, check return type, add asset type
     pub fn get_price() -> u128 {
         1
@@ -68,6 +77,9 @@ mod synthetics {
     impl Synthetics {
         #[ink(constructor, selector = "0xCAFEBABE")]
         /// When a contract is first created, a short is minted with the balance given
+        /// # Panics
+        /// 
+        /// If not enough IM is sent
         pub fn new(initial_supply: Balance) -> Self {
             // TODO: how do I add the margin, start by taking the margin here
             let caller = Self::env().caller();
@@ -75,7 +87,14 @@ mod synthetics {
             // TODO make the HC percentage a parameter
             let im = initial_supply * get_price() / 5;
             // TODO Should I panic?
-            assert!(im <= Self::env().transferred_balance());
+            let margin_sent = Self::env().transferred_balance();
+            if im > margin_sent {
+                let message = ink_prelude::format!("Not enough IM is posted, we need a minimum of {} and {} was given.", margin_sent, im);
+                // TODO ugly
+                let m = message.clone();
+                Self::env().emit_event(Error { message });
+                panic!("{}", m);
+            }
             let short = Token::new(initial_supply, caller);
             Self::env().emit_event(TokenMinted {
                 creator: caller,
@@ -83,7 +102,10 @@ mod synthetics {
             });
             let long = Token::new(0, caller);
 
-            Self{ short, long }
+            let mut margin = ink_storage::collections::HashMap::new();
+            margin.insert(caller, margin_sent);
+
+            Self{ short, long, margin }
         }
 
         #[ink(message)]
